@@ -51,6 +51,17 @@ func TestArrayCircularReferenceConcat(t *testing.T) {
 	testScript(SCRIPT, valueTrue, t)
 }
 
+func TestArrayCircularReferenceToLocaleString(t *testing.T) {
+	const SCRIPT = `
+	var T = [1, 2, 3];
+	T[42] = T;  // Create circular reference
+	var str = T.toLocaleString();
+	// Circular reference should be replaced with empty string
+	str === "1,2,3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,";
+	`
+	testScript(SCRIPT, valueTrue, t)
+}
+
 func TestArrayMultipleCircularReferences(t *testing.T) {
 	const SCRIPT = `
 	var T = [1, 2, 3];

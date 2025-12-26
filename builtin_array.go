@@ -266,6 +266,22 @@ func (r *Runtime) writeItemLocaleString(item Value, buf *StringBuilder) {
 
 func (r *Runtime) arrayproto_toLocaleString(call FunctionCall) Value {
 	array := call.This.ToObject(r)
+	
+	// Check for circular reference in the toString stack
+	for _, obj := range r.toStringStack {
+		if array.SameAs(obj) {
+			// Circular reference detected, return empty string to avoid infinite recursion
+			return stringEmpty
+		}
+	}
+	
+	// Push this object onto the stack
+	r.toStringStack = append(r.toStringStack, array)
+	defer func() {
+		// Pop from stack when done
+		r.toStringStack = r.toStringStack[:len(r.toStringStack)-1]
+	}()
+	
 	var buf StringBuilder
 	if a := r.checkStdArrayObj(array); a != nil {
 		for i, item := range a.values {
