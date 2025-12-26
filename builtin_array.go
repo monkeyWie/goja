@@ -176,24 +176,37 @@ func (r *Runtime) arrayproto_pop(call FunctionCall) Value {
 	}
 }
 
-func (r *Runtime) arrayproto_join(call FunctionCall) Value {
-	o := call.This.ToObject(r)
-	
+// pushToStringStack checks for circular references and pushes an object onto the toString stack.
+// Returns true if the object is already in the stack (circular reference detected), false otherwise.
+// If false is returned, the caller must ensure the object is popped from the stack when done.
+func (r *Runtime) pushToStringStack(o *Object) bool {
 	// Check for circular reference in the toString stack
 	for _, obj := range r.toStringStack {
 		if o.SameAs(obj) {
-			// Circular reference detected, return empty string to avoid infinite recursion
-			// This matches the behavior of mainstream JavaScript engines (V8, SpiderMonkey)
-			return stringEmpty
+			// Circular reference detected
+			return true
 		}
 	}
 	
 	// Push this object onto the stack
 	r.toStringStack = append(r.toStringStack, o)
-	defer func() {
-		// Pop from stack when done
-		r.toStringStack = r.toStringStack[:len(r.toStringStack)-1]
-	}()
+	return false
+}
+
+// popToStringStack removes an object from the toString stack.
+func (r *Runtime) popToStringStack() {
+	r.toStringStack = r.toStringStack[:len(r.toStringStack)-1]
+}
+
+func (r *Runtime) arrayproto_join(call FunctionCall) Value {
+	o := call.This.ToObject(r)
+	
+	if r.pushToStringStack(o) {
+		// Circular reference detected, return empty string to avoid infinite recursion
+		// This matches the behavior of mainstream JavaScript engines (V8, SpiderMonkey)
+		return stringEmpty
+	}
+	defer r.popToStringStack()
 	
 	l := int(toLength(o.self.getStr("length", nil)))
 	var sep String
@@ -267,20 +280,11 @@ func (r *Runtime) writeItemLocaleString(item Value, buf *StringBuilder) {
 func (r *Runtime) arrayproto_toLocaleString(call FunctionCall) Value {
 	array := call.This.ToObject(r)
 	
-	// Check for circular reference in the toString stack
-	for _, obj := range r.toStringStack {
-		if array.SameAs(obj) {
-			// Circular reference detected, return empty string to avoid infinite recursion
-			return stringEmpty
-		}
+	if r.pushToStringStack(array) {
+		// Circular reference detected, return empty string to avoid infinite recursion
+		return stringEmpty
 	}
-	
-	// Push this object onto the stack
-	r.toStringStack = append(r.toStringStack, array)
-	defer func() {
-		// Pop from stack when done
-		r.toStringStack = r.toStringStack[:len(r.toStringStack)-1]
-	}()
+	defer r.popToStringStack()
 	
 	var buf StringBuilder
 	if a := r.checkStdArrayObj(array); a != nil {
