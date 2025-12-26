@@ -178,6 +178,23 @@ func (r *Runtime) arrayproto_pop(call FunctionCall) Value {
 
 func (r *Runtime) arrayproto_join(call FunctionCall) Value {
 	o := call.This.ToObject(r)
+	
+	// Check for circular reference in the toString stack
+	for _, obj := range r.toStringStack {
+		if o.SameAs(obj) {
+			// Circular reference detected, return empty string to avoid infinite recursion
+			// This matches the behavior of mainstream JavaScript engines (V8, SpiderMonkey)
+			return stringEmpty
+		}
+	}
+	
+	// Push this object onto the stack
+	r.toStringStack = append(r.toStringStack, o)
+	defer func() {
+		// Pop from stack when done
+		r.toStringStack = r.toStringStack[:len(r.toStringStack)-1]
+	}()
+	
 	l := int(toLength(o.self.getStr("length", nil)))
 	var sep String
 	if s := call.Argument(0); s != _undefined {
